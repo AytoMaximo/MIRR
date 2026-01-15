@@ -74,6 +74,100 @@ def derive_hazard(df: pd.DataFrame, tol: Dict[int, AnchorTolerances]) -> pd.Seri
     return (np.isfinite(err_plan) & (err_plan > delta)) | (np.isfinite(err_yaw) & (np.abs(err_yaw) > phi))
 
 
+def derive_hazard_obs(
+    df: pd.DataFrame,
+    *,
+    delta_tau_max: float,
+    q_track_min: float | None = None,
+    eta_min: float | None = None,
+) -> pd.Series:
+    """Событие Haz^{obs} — наблюдаемый суррогат навигационной опасности.
+
+    Определение (прикладная версия для гл. 4.3).
+    Haz^{obs}=1 фиксирует «подозрительное» принятие, которое можно выявить без
+    эталона, опираясь только на поля журнала.
+
+    Минимально достаточный компонент (устойчивый к разным платформам):
+    - низкая маржинальность гипотез Δτ (неуверенная развязка между 1-й и 2-й
+      гипотезами). В демо используем порог Δτ < delta_tau_max.
+
+    Дополнительные (опциональные) компоненты, если они логируются:
+    - низкое качество трекинга q_track < q_track_min;
+    - низкая сохранность признаков η < eta_min.
+
+    Замечание. Если Δτ не определена (например, платформа выдает одну гипотезу),
+    считаем это неблагоприятным признаком и помечаем Haz^{obs}=1.
+    """
+    # Δτ — основной наблюдаемый суррогат (двухгипотезный режим).
+    dt = df["delta_tau"].astype(float) if "delta_tau" in df.columns else pd.Series(np.nan, index=df.index)
+    obs = (~np.isfinite(dt)) | (np.isfinite(dt) & (dt < float(delta_tau_max)))
+
+    # дополнительные сигналы (если заданы)
+    if q_track_min is not None:
+        q = df["q_track"].astype(float) if "q_track" in df.columns else pd.Series(np.nan, index=df.index)
+        obs = obs | (np.isfinite(q) & (q < float(q_track_min)))
+    if eta_min is not None:
+        eta = df["eta"].astype(float) if "eta" in df.columns else pd.Series(np.nan, index=df.index)
+        obs = obs | (np.isfinite(eta) & (eta < float(eta_min)))
+    return obs
+
+
+def validate_haz_obs_against_haz(
+    attempts: pd.DataFrame,
+    *,
+    accept_mask: pd.Series,
+    tol: Dict[int, AnchorTolerances],
+    delta_tau_max: float,
+    q_track_min: float | None,
+    eta_min: float | None,
+) -> pd.DataFrame:
+    """Мини-эксперимент сопоставления Haz^{obs} и Haz на данных с эталоном.
+
+    Возвращает одну строку с условными вероятностями и частотами:
+    - Pr(Haz=1 | Haz^{obs}=1)
+    - Pr(Haz=1 | Haz^{obs}=0)
+    а также TPR/FPR для бинарного предиката Haz^{obs}.
+    """
+    df = attempts.copy()
+    haz_true = derive_hazard(df, tol)
+    haz_obs = derive_hazard_obs(
+        df,
+        delta_tau_max=float(delta_tau_max),
+        q_track_min=(float(q_track_min) if q_track_min is not None else None),
+        eta_min=(float(eta_min) if eta_min is not None else None),
+    )
+
+    # интересуют именно случаи, когда попытка прошла фильтры и была «принята»
+    accept_mask = accept_mask.astype(bool)
+    haz_true_acc = (accept_mask & haz_true)
+    haz_obs_acc = (accept_mask & haz_obs)
+
+    # условные вероятности
+    n_obs1 = int(haz_obs_acc.sum())
+    n_obs0 = int((accept_mask & (~haz_obs)).sum())
+    p_haz_given_obs1 = float((haz_true_acc & haz_obs).sum()) / float(n_obs1) if n_obs1 > 0 else float("nan")
+    p_haz_given_obs0 = float((haz_true_acc & (~haz_obs)).sum()) / float(n_obs0) if n_obs0 > 0 else float("nan")
+
+    # TPR/FPR
+    n_haz = int(haz_true_acc.sum())
+    n_nonhaz = int((accept_mask & (~haz_true)).sum())
+    tpr = float((haz_true_acc & haz_obs).sum()) / float(n_haz) if n_haz > 0 else float("nan")
+    fpr = float(((~haz_true) & haz_obs_acc).sum()) / float(n_nonhaz) if n_nonhaz > 0 else float("nan")
+
+    return pd.DataFrame([dict(
+        delta_tau_max=float(delta_tau_max),
+        q_track_min=(float(q_track_min) if q_track_min is not None else np.nan),
+        eta_min=(float(eta_min) if eta_min is not None else np.nan),
+        N_accept=int(accept_mask.sum()),
+        N_haz=int(n_haz),
+        N_haz_obs=int(n_obs1),
+        P_haz_given_haz_obs1=p_haz_given_obs1,
+        P_haz_given_haz_obs0=p_haz_given_obs0,
+        TPR=tpr,
+        FPR=fpr,
+    )])
+
+
 def compute_tail_probabilities(df: pd.DataFrame, time_budget_s: float, tol: Dict[int, AnchorTolerances]) -> pd.DataFrame:
     """Pitail,δ(Time) и Pitail,φ(Time) условно на успех (3.36)–(3.37)."""
     df = df.copy()

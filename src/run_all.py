@@ -39,8 +39,15 @@ from metrics import (
     succ_within_time,
     compute_navigation_metrics,
     two_scale_degradation_detector,
+    validate_haz_obs_against_haz,
 )
-from calibration import SweepConfig, sweep_thresholds, make_pretty
+from calibration import (
+    SweepConfig,
+    sweep_thresholds,
+    make_pretty,
+    calibrate_thresholds_operational_loso,
+    make_pretty_loso,
+)
 
 from plots import (
     plot_p_succ_curve,
@@ -71,6 +78,23 @@ def _default_cfg() -> dict:
         "lambda_yaw_m_per_rad": 0.6,
         "alpha_route": 0.01,
         "n_eff_demo": 12,
+        # Параметры демонстрации калибровки §4.3.
+        # Важно: в небольших демо-журналах число негативных попыток ограничено,
+        # поэтому для иллюстрации доверительных границ используется более
+        # мягкий маршрутный риск-бюджет, чем в «продакшн» примере.
+        "calibration_demo": {
+            "alpha_route": 0.30,
+            "p_accept_min": 0.15,
+            "beta_ci": 0.05,
+        },
+        # Пороговая версия наблюдаемого суррогата Haz^{obs} (см. §4.3).
+        # В демо берём «низкую маржинальность» Δτ как основной индикатор,
+        # а q_track/η оставляем опциональными.
+        "haz_obs": {
+            "delta_tau_max": 0.20,
+            "q_track_min": None,
+            "eta_min": None,
+        },
         "thresholds": {
             "tau_min": 0.6,
             "delta_tau_min": 0.15,
@@ -255,6 +279,16 @@ def main() -> None:
     thr = AcceptanceThresholds(**cfg["thresholds"])
     tol = {int(k): AnchorTolerances(**v) for k, v in cfg["tolerances"].items()}
 
+    # Вспомогательное событие «принято по заданным порогам» для валидации Haz^{obs}.
+    # Используем те же фильтры, что и в переборе порогов: успех по времени + пороги + gate.
+    def _accept_mask_for_thresholds(df: pd.DataFrame, tau_min: float, delta_tau_min: float) -> pd.Series:
+        tau1 = df["tau1"].astype(float)
+        delta_tau = df["delta_tau"].astype(float)
+        has_dt = np.isfinite(delta_tau)
+        pass_tau = (tau1 >= float(tau_min)) & (~has_dt | (delta_tau >= float(delta_tau_min)))
+        gate_ok = (df["gate"].astype(int) == 1) if ("gate" in df.columns) else pd.Series(True, index=df.index)
+        return succ_within_time(df, float(cfg["Time_budget_s"])) & pass_tau & gate_ok
+
     anchor_table = compute_anchor_table(
         attempts=attempts,
         time_budget_s=float(cfg["Time_budget_s"]),
@@ -274,20 +308,55 @@ def main() -> None:
     attempts["failure_class"] = classify_failures(attempts, time_budget_s=float(cfg["Time_budget_s"]))
     attempts.to_csv(out_tables / "attempts_with_failure_class.csv", index=False)
 
-    # подгон порогов (гл. 4.3): демонстрационный перебор
+    # Мини-эксперимент: сопоставление Haz^{obs} и Haz (только на данных с эталоном).
+    hazobs_cfg = cfg.get("haz_obs", {})
+    accept_for_val = _accept_mask_for_thresholds(
+        attempts,
+        tau_min=float(cfg["thresholds"]["tau_min"]),
+        delta_tau_min=float(cfg["thresholds"]["delta_tau_min"]),
+    )
+    hazobs_val = validate_haz_obs_against_haz(
+        attempts,
+        accept_mask=accept_for_val,
+        tol=tol,
+        delta_tau_max=float(hazobs_cfg.get("delta_tau_max", 0.20)),
+        q_track_min=hazobs_cfg.get("q_track_min", None),
+        eta_min=hazobs_cfg.get("eta_min", None),
+    )
+    hazobs_val.to_csv(out_tables / "haz_obs_validation.csv", index=False)
+    hazobs_val.rename(columns={
+        "delta_tau_max": "Порог Δτ_max для Haz^{obs}, доля",
+        "q_track_min": "Порог q_track_min, доля",
+        "eta_min": "Порог η_min, доля",
+        "N_accept": "Принято попыток (по порогам), шт",
+        "N_haz": "Опасных принятий Haz=1, шт",
+        "N_haz_obs": "Срабатываний Haz^{obs}=1, шт",
+        "P_haz_given_haz_obs1": "Pr(Haz=1 | Haz^{obs}=1)",
+        "P_haz_given_haz_obs0": "Pr(Haz=1 | Haz^{obs}=0)",
+        "TPR": "TPR",
+        "FPR": "FPR",
+    }).to_csv(out_tables / "haz_obs_validation_pretty.csv", index=False)
+
+    # --- §4.3. Калибровка порогов ---
+    # 1) режим оценки (c эталоном): перебор порогов по Haz
+    # 2) режим эксплуатации: калибровка по негативным попыткам + LOSO по сессиям
+    #
     # В демо используем n_eff как число узлов выбора (если они есть), иначе берём cfg["n_eff_demo"].
     if args.nodes is not None and Path(args.nodes).exists():
         n_eff = int(pd.read_csv(args.nodes)["node_id"].nunique())
     else:
         n_eff = int(cfg.get("n_eff_demo", 10))
+
+    calib_demo = cfg.get("calibration_demo", {})
     sweep_cfg = SweepConfig(
-        p_accept_min=0.15,
-        alpha_route=float(cfg["alpha_route"]),
+        p_accept_min=float(calib_demo.get("p_accept_min", 0.15)),
+        alpha_route=float(calib_demo.get("alpha_route", cfg["alpha_route"])),
         n_eff=n_eff,
+        beta_ci=float(calib_demo.get("beta_ci", 0.05)),
     )
     tau_grid = [0.60, 0.70, 0.80, 0.85]
     dt_grid = [0.15, 0.20, 0.25, 0.30]
-    sweep = sweep_thresholds(
+    sweep_gt = sweep_thresholds(
         attempts,
         time_budget_s=float(cfg["Time_budget_s"]),
         tol=tol,
@@ -295,8 +364,20 @@ def main() -> None:
         delta_tau_min_grid=dt_grid,
         cfg=sweep_cfg,
     )
-    sweep.to_csv(out_tables / "threshold_sweep.csv", index=False)
-    make_pretty(sweep).to_csv(out_tables / "threshold_sweep_pretty.csv", index=False)
+
+    sweep_gt.to_csv(out_tables / "threshold_sweep_gt.csv", index=False)
+    make_pretty(sweep_gt).to_csv(out_tables / "threshold_sweep_gt_pretty.csv", index=False)
+
+    folds, folds_summary = calibrate_thresholds_operational_loso(
+        attempts,
+        time_budget_s=float(cfg["Time_budget_s"]),
+        tau_min_grid=tau_grid,
+        delta_tau_min_grid=dt_grid,
+        cfg=sweep_cfg,
+    )
+    folds.to_csv(out_tables / "threshold_loso_folds.csv", index=False)
+    make_pretty_loso(folds).to_csv(out_tables / "threshold_loso_folds_pretty.csv", index=False)
+    folds_summary.to_csv(out_tables / "threshold_loso_summary.csv", index=False)
 
     # рисунки
     plot_p_succ_curve(curve=curve, anchor_ids=[1, 2], out_path=out_figs / "p_succ_vs_T.png")
@@ -304,6 +385,8 @@ def main() -> None:
     plot_error_distribution(attempts, succ_mask, out_path=out_figs / "err_plan_hist.png", kind="hist")
     n_eff_grid = list(range(1, 31))
     plot_alpha_step(float(cfg["alpha_route"]), n_eff_grid, out_path=out_figs / "alpha_step_vs_n_eff.png")
+    # Отдельный график для §4.3 с риск-бюджетом демонстрационной калибровки.
+    plot_alpha_step(float(sweep_cfg.alpha_route), n_eff_grid, out_path=out_figs / "alpha_step_vs_n_eff_calib.png")
     plot_failure_pie(attempts, out_path=out_figs / "failure_types_pie.png")
 
     # навигационные метрики (если задан файл узлов и он существует)

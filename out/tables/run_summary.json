@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2026-01-14T19:59:00.421833Z",
+  "generated_at_utc": "2026-01-15T16:58:20.374225Z",
   "inputs": {
-    "attempts_csv": "/mnt/data/ch4proj_v2/demo/demo_log.csv",
-    "nodes_csv": "/mnt/data/ch4proj_v2/demo/demo_nodes.csv"
+    "attempts_csv": "/mnt/data/ch4proj/demo/demo_log.csv",
+    "nodes_csv": "/mnt/data/ch4proj/demo/demo_nodes.csv"
   },
   "counts": {
     "attempts": 80,
@@ -11,7 +11,7 @@
   },
   "key_parameters": {
     "time_budget_s": 3.0,
-    "alpha_route": 0.1,
+    "alpha_route": 0.01,
     "alpha_cvar": 0.9,
     "lambda_yaw_m_per_rad": 0.6
   },

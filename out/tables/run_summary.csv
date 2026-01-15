@@ -1,6 +1,6 @@
 metric,value
-Путь к журналу попыток,/mnt/data/ch4proj_v2/demo/demo_log.csv
-Путь к журналу узлов,/mnt/data/ch4proj_v2/demo/demo_nodes.csv
+Путь к журналу попыток,/mnt/data/ch4proj/demo/demo_log.csv
+Путь к журналу узлов,/mnt/data/ch4proj/demo/demo_nodes.csv
 Число попыток,80
 Число сессий,12
 Число якорей,2

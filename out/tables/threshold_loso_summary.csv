@@ -1,0 +1,2 @@
+n_folds,n_ok_folds,tau_min_mode,delta_tau_min_mode,P_accept_pos_test_mean,FA_rate_test_mean
+12,10,0.8,0.15,0.4023809523809524,0.0

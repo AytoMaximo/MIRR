@@ -12,10 +12,23 @@ plots.py — графики для демонстрационного расчё
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, Optional, Sequence
+
+import os
 
 import numpy as np
 import pandas as pd
+
+# Matplotlib в headless-средах часто пытается писать кэш шрифтов/настроек в
+# домашний каталог. Чтобы избежать подвисаний из-за прав/блокировок, принудительно
+# задаём каталог конфигурации внутри проекта.
+_mpl_cfg = Path(__file__).resolve().parents[1] / "out" / ".mplconfig"
+_mpl_cfg.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", str(_mpl_cfg))
+
+# Принудительно используем неинтерактивный backend.
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 

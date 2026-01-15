@@ -2,8 +2,18 @@
   "Time_budget_s": 3.0,
   "alpha_cvar": 0.9,
   "lambda_yaw_m_per_rad": 0.6,
-  "alpha_route": 0.1,
+  "alpha_route": 0.01,
   "n_eff_demo": 12,
+  "calibration_demo": {
+    "alpha_route": 0.3,
+    "p_accept_min": 0.15,
+    "beta_ci": 0.05
+  },
+  "haz_obs": {
+    "delta_tau_max": 0.2,
+    "q_track_min": null,
+    "eta_min": null
+  },
   "thresholds": {
     "tau_min": 0.6,
     "delta_tau_min": 0.15,

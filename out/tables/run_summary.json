@@ -1,0 +1,31 @@
+{
+  "generated_at_utc": "2026-01-14T19:59:00.421833Z",
+  "inputs": {
+    "attempts_csv": "/mnt/data/ch4proj_v2/demo/demo_log.csv",
+    "nodes_csv": "/mnt/data/ch4proj_v2/demo/demo_nodes.csv"
+  },
+  "counts": {
+    "attempts": 80,
+    "sessions": 12,
+    "anchors": 2
+  },
+  "key_parameters": {
+    "time_budget_s": 3.0,
+    "alpha_route": 0.1,
+    "alpha_cvar": 0.9,
+    "lambda_yaw_m_per_rad": 0.6
+  },
+  "aggregates": {
+    "share_success_within_time": 0.375,
+    "outcome_counts": {
+      "не принял": 50,
+      "успех": 24,
+      "принял неверно": 6
+    },
+    "outcome_shares": {
+      "не принял": 0.625,
+      "успех": 0.3,
+      "принял неверно": 0.075
+    }
+  }
+}

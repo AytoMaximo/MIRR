@@ -1,0 +1,30 @@
+{
+  "Time_budget_s": 3.0,
+  "alpha_cvar": 0.9,
+  "lambda_yaw_m_per_rad": 0.6,
+  "alpha_route": 0.1,
+  "n_eff_demo": 12,
+  "thresholds": {
+    "tau_min": 0.6,
+    "delta_tau_min": 0.15,
+    "tau_conf": 0.85,
+    "delta_tau_conf": 0.25
+  },
+  "tolerances": {
+    "1": {
+      "delta_m": 0.5,
+      "phi_rad": 0.35
+    },
+    "2": {
+      "delta_m": 0.6,
+      "phi_rad": 0.4
+    }
+  },
+  "detector": {
+    "alpha_fast": 0.35,
+    "alpha_slow": 0.8,
+    "theta_low": 0.45,
+    "theta_gap": 0.08,
+    "L": 3
+  }
+}

@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2026-01-15T16:58:20.374225Z",
+  "generated_at_utc": "2026-01-20T16:01:13.275060Z",
   "inputs": {
-    "attempts_csv": "/mnt/data/ch4proj/demo/demo_log.csv",
-    "nodes_csv": "/mnt/data/ch4proj/demo/demo_nodes.csv"
+    "attempts_csv": "W:\\PythonProjects\\Chapter4_artifacts\\demo\\demo_log.csv",
+    "nodes_csv": "W:\\PythonProjects\\Chapter4_artifacts\\demo\\demo_nodes.csv"
   },
   "counts": {
     "attempts": 80,

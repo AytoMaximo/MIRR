@@ -71,7 +71,7 @@ def plot_error_distribution(attempts: pd.DataFrame, succ_mask: pd.Series, out_pa
     else:
         plt.hist(errs.to_numpy(), bins=18)
         plt.xlabel("Ошибка положения на плане, м")
-        plt.ylabel("Частота, шт")
+        plt.ylabel("Количество, шт")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(out_path, dpi=180)
